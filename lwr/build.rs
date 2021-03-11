@@ -2,7 +2,7 @@ extern crate byteorder;
 use byteorder::{ReadBytesExt, LE};
 use std::{
     fs::File,
-    io::Write,
+    io::{BufReader, BufWriter, Write},
     path::{Path, PathBuf},
 };
 
@@ -24,19 +24,19 @@ fn main() {
     let out_path: PathBuf = [std::env::var("OUT_DIR").unwrap().as_str(), "regions.rs"]
         .iter()
         .collect();
-    let mut out = File::create(out_path).unwrap();
+    let mut out = BufWriter::new(File::create(out_path).unwrap());
 
     gen_region_header(&regions, &mut out);
 
     for (region_name, h3_file_path) in &regions {
         let h3_file_path = Path::new(h3_file_path).canonicalize().unwrap();
         println!("cargo:rerun-if-changed={}", h3_file_path.to_str().unwrap());
-        let h3_file = File::open(h3_file_path).unwrap();
+        let h3_file = BufReader::new(File::open(h3_file_path).unwrap());
         gen_region_array(region_name, h3_file, &mut out);
     }
 }
 
-fn gen_region_header(regions: &[(&str, &str)], out: &mut File) {
+fn gen_region_header(regions: &[(&str, &str)], out: &mut BufWriter<File>) {
     write!(out, "pub static REGIONS: &[(&str, &[u64])] = &[\n").unwrap();
     for (region_name, _) in regions {
         write!(out, "    (\"{}\", {}),\n", region_name, region_name).unwrap()
@@ -44,7 +44,7 @@ fn gen_region_header(regions: &[(&str, &str)], out: &mut File) {
     write!(out, "];\n\n").unwrap();
 }
 
-fn gen_region_array(region_name: &str, mut h3_indices: File, out: &mut File) {
+fn gen_region_array(region_name: &str, mut h3_indices: BufReader<File>, out: &mut BufWriter<File>) {
     write!(out, "pub static {}: &[u64] = &[\n", region_name).unwrap();
     while let Ok(h3_index) = h3_indices.read_u64::<LE>() {
         write!(out, "    {:#016x},\n", h3_index).unwrap()
